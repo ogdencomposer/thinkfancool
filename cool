@@ -1,0 +1,111 @@
+#!/usr/bin/python3
+# Python 3 script to more easily make thinkfan work on some less
+# supported laptops - this version is specifically nice for my 
+# Lenovo P1 gen 5, you will need to install thinkfan and season to taste.
+# Generates a /etc/thinkfan.conf file from the current output of
+# $ find /sys/devices -type f -name "temp*_input"
+# with comments and appends the fan profile based on flags -a, -n and -e
+# I wrote this bc I have a thinkpad I really like but it is not supported
+# by linux. The key thing not supported is cooling. Speficically, the
+# files mapped to the heat sensors change on every reboot, which means
+# the thinkfan daemon chokes on /etc/thinkfan.conf and fails to start. 
+# Did I say, assumes use of thinkfan? https://github.com/vmatare/thinkfan
+# Thinkfan devs, thank you.
+# THE FAN PROFILES HEREIN MAY NOT BE SAFE FOR YOUR PARTICULAR THINKPAD. 
+# UNDERSTAND THINKFAN FIRST
+#
+# CC0 1.0 UNIVERSAL DEED
+# No Copyright
+# The person who associated a work with this deed has dedicated the work to the public domain by waiving all of his or her rights to the work worldwide under copyright law, including all related and neighboring rights, to the extent allowed by law.
+# You can copy, modify, distribute and perform the work, even for commercial purposes, all without asking permission. See Other Information below.
+# Other Information
+# In no way are the patent or trademark rights of any person affected by CC0, nor are the rights that other persons may have in the work or in how the work is used, such as publicity or privacy rights.
+# Unless expressly stated otherwise, the person who associated a work with this deed makes no warranties about the work, and disclaims liability for all uses of the work, to the fullest extent permitted by applicable law.
+# When using or citing the work, you should not imply endorsement by the author or the affirmer.
+# Cultcompound needed a cooler lap, lord, a promised land.
+
+import subprocess
+import sys
+# check for flags -a (agressive cooling) -e (energy saving - hotter) -n (normie)
+if len(sys.argv) != 2:
+    print("usage: cool -a (or -e or -n) or cool -help")
+    exit()
+
+fanprofile = None
+
+fanprofileagressive = """
+# agressive cooling
+(0,	0,	40)
+(1,	40,	45)
+(2,	45,	50)
+(3,	50,	55)
+(4,	55,	60)
+(5,	60,	65)
+(7,	65,	32767)
+"""
+
+fanprofilenormie = """
+# normie 
+(0,     0,      50)
+(1,     50,     55)
+(2,     55,     60)
+(3,     60,     65)
+(4,     65,     70)
+(5,     70,     75)
+(7,     75,     32767)
+"""
+
+fanprofileenergy = """
+# energy saving
+(0,     0,      60)
+(1,     60,     65)
+(2,     65,     70)
+(3,     70,     75)
+(4,     75,     80)
+(5,     80,     85)
+(7,     85,     32767)
+"""
+
+if sys.argv[1] == "-help":
+    print("cool is written for use with thinkfan, reading the temperature")
+    print("sensor system files and copying those paths into a thinkfan.conf")
+    print("file in the home directory.")
+    print("Run under sudo and it will copy to /etc/thinkfan.conf and restart thinkfan.")
+    print("There are three flags -a for agressive cooling, -e for energy")
+    print("savings, runs hotter, and -n for a kind of normie middle ground.")
+    print("Creative commons DEED CC0 1.0 Universal.")
+    exit()
+elif sys.argv[1] == "-a":
+    print("setting agressive fan profile (cooler, worse battery)")
+    fanprofile = fanprofileagressive
+elif sys.argv[1] == "-e":
+    print("setting energy saving fan profile (hotter, better battery)")
+    fanprofile = fanprofileenergy
+elif sys.argv[1] == "-n":
+    print("setting normal fan curve (some kind of middle cooling and battery")
+    fanprofile = fanprofilenormie
+else:
+    print("bad argument try -help")
+    exit()
+
+# find the temp sensors with find /sys/devices -type f -name "temp*_input"
+# and add them to an array
+proc = subprocess.Popen('find /sys/devices -type f -name "temp*_input"',shell=True,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+result=proc.stdout.readlines()
+devices = [] 
+if len(result) >= 1:
+    for line in result:
+        temp = line.decode("utf-8")
+        if "thinkpad_hwmon" not in temp: # these disapear sometimes!
+            devices.append(temp)
+# prepend "hwmon " onto each
+# line in a file
+fhandle = open("/home/beestal/thinkfan.conf", "w")
+for device in devices:
+    fhandle.write("hwmon " + device)
+fhandle.write(fanprofile)
+fhandle.close()
+
+# copy the config file and restart 
+proc = subprocess.Popen('cp ./thinkfan.conf /etc/thinkfan.conf',shell=True,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+proc = subprocess.Popen('systemctl restart thinkfan',shell=True,stdin=None,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
